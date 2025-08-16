@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doc-It-Up-2.0</title>
-    <link rel="stylesheet" href="../static/style.css">
+    <title>Socket Messenger</title>
     <!-- The client-side library for Socket.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    
+    <link rel="stylesheet" href="../static/style.css">
 </head>
 <body>
-    <!-- The entire body and HTML structure remains the same -->
     <div class="container">
         <div class="header">
             <h1>Socket Messenger</h1>
@@ -181,9 +181,6 @@
                 return;
             }
 
-            // UPDATED: No more hardcoded URL. The client will connect to the
-            // server that served this HTML file. This works for both local
-            // testing and live deployment on Render.
             socket = io();
 
             // --- Socket Event Handlers ---
@@ -221,7 +218,7 @@
             }
         }
 
-        function sendMessage() {
+        async function sendMessage() {
             if (!socket || !socket.connected) {
                 showToast('You are not connected.', 'error');
                 return;
@@ -233,7 +230,7 @@
 
             switch (currentMessageType) {
                 case 'text':
-                    const text = document.getElementById('messageText').value; // Get raw text
+                    const text = document.getElementById('messageText').value;
                     if (!text) return showToast('Message is empty.', 'error');
                     messageData.content = text;
                     document.getElementById('messageText').value = '';
@@ -253,19 +250,36 @@
                     if (!file) return showToast('Please select a file.', 'error');
                     if (file.size > 10 * 1024 * 1024) return showToast('File exceeds 10MB limit.', 'error');
                     
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        messageData.fileName = file.name;
-                        messageData.fileSize = file.size;
-                        messageData.fileData = e.target.result;
-                        
-                        socket.emit('send_message', messageData);
-                    };
-                    reader.readAsDataURL(file);
+                    const formData = new FormData();
+                    formData.append('file', file);
 
+                    try {
+                        showToast('Uploading file...', 'info');
+                        const response = await fetch('/upload', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('File upload failed');
+                        }
+
+                        const result = await response.json();
+                        
+                        messageData.type = 'document';
+                        messageData.fileName = result.name;
+                        messageData.fileSize = result.size;
+                        messageData.fileUrl = result.url; // The URL from the server
+
+                    } catch (error) {
+                        console.error('Upload error:', error);
+                        showToast('File upload failed. Please try again.', 'error');
+                        return;
+                    }
+                    
                     fileInput.value = '';
                     document.getElementById('selectedFile').classList.add('hidden');
-                    return; 
+                    break; 
             }
             
             socket.emit('send_message', messageData);
@@ -304,13 +318,13 @@
             msgDiv.className = `message ${messageClass}`;
 
             let contentHTML = '';
-            let rawContent = ''; // Store the raw text for the copy function
+            let rawContent = '';
 
             switch (data.type) {
                 case 'text':
                     const pre = document.createElement('pre');
                     const code = document.createElement('code');
-                    code.textContent = data.content; // Use textContent to prevent XSS
+                    code.textContent = data.content;
                     pre.appendChild(code);
                     contentHTML = pre.outerHTML;
                     rawContent = data.content;
@@ -320,8 +334,9 @@
                     rawContent = data.url;
                     break;
                 case 'document':
-                    contentHTML = `📄 <a href="${data.fileData}" download="${data.fileName}">${data.fileName}</a> (${(data.fileSize / 1024 / 1024).toFixed(2)} MB)`;
-                    rawContent = data.fileName;
+                    // Use the fileUrl from the message data
+                    contentHTML = `📄 <a href="${data.fileUrl}" target="_blank" rel="noopener noreferrer">${data.fileName}</a> (${(data.fileSize / 1024 / 1024).toFixed(2)} MB)`;
+                    rawContent = window.location.origin + data.fileUrl; // Full URL for copying
                     break;
             }
 
@@ -360,4 +375,3 @@
     </script>
 </body>
 </html>
-

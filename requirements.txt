@@ -3,3 +3,4 @@ Flask-SocketIO==5.3.3
 Flask-Cors==3.0.10
 gunicorn==20.1.0
 eventlet==0.33.3
+Werkzeug==2.3.7

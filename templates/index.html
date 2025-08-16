@@ -9,9 +9,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
 </head>
 <body>
+    <!-- The entire body and HTML structure remains the same -->
     <div class="container">
         <div class="header">
-            <h1>Doc It Up 2.0</h1>
+            <h1>Socket Messenger</h1>
             <p>Modern real-time communication platform</p>
         </div>
         <div class="app-layout">
@@ -116,7 +117,7 @@
         const roomSelect = document.getElementById('roomSelect');
         const customRoomInput = document.getElementById('customRoom');
 
-        // --- Event Listeners ---
+        // --- Event Listeners and other functions remain the same... ---
         roomSelect.addEventListener('change', function() {
             customRoomInput.classList.toggle('hidden', this.value !== 'custom');
         });
@@ -136,7 +137,6 @@
             }
         });
         
-        // --- Drag and Drop ---
         const fileUploadArea = document.querySelector('.file-upload-area');
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             fileUploadArea.addEventListener(eventName, e => {
@@ -155,7 +155,6 @@
             fileInput.dispatchEvent(new Event('change', { bubbles: true }));
         }, false);
 
-        // --- Core Functions ---
         function selectMessageType(type) {
             currentMessageType = type;
             document.querySelectorAll('.type-option').forEach(opt => opt.classList.remove('active'));
@@ -182,16 +181,10 @@
                 return;
             }
 
-            // Establish connection with the backend server
-            // IMPORTANT: Replace the URL with your live Render URL
-            const serverUrl = 'https://doc-it-up-2-0.onrender.com'; // e.g., 'https://your-app-name.onrender.com'
-            if (serverUrl === 'https://doc-it-up-2-0.onrender.com') {
-                showToast('Please update the serverUrl in the script!', 'error');
-                // For local testing, fallback to localhost
-                socket = io("ws://localhost:5000");
-            } else {
-                socket = io(serverUrl);
-            }
+            // UPDATED: No more hardcoded URL. The client will connect to the
+            // server that served this HTML file. This works for both local
+            // testing and live deployment on Render.
+            socket = io();
 
             // --- Socket Event Handlers ---
             socket.on('connect', () => {

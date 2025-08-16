@@ -1,9 +1,9 @@
 # app.py
 # Import necessary libraries
-from flask import Flask, request
+from flask import Flask, request, render_template
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from flask_cors import CORS
-import eventlet # Required for Gunicorn
+import eventlet
 
 # It's good practice to monkey patch at the beginning
 eventlet.monkey_patch()
@@ -13,8 +13,8 @@ eventlet.monkey_patch()
 # -----------------------------------------------------------------------------
 
 # Initialize the Flask application
-app = Flask(__name__)
-# It's good practice to set a secret key
+# The template_folder='templates' is the default, but we make it explicit here.
+app = Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = 'your-very-secret-key!'
 
 # Enable Cross-Origin Resource Sharing (CORS)
@@ -24,27 +24,32 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', max_http_buffer_size=10 * 1024 * 1024)
 
 # -----------------------------------------------------------------------------
+# NEW: HTTP Route to Serve the Frontend
+# -----------------------------------------------------------------------------
+
+@app.route('/')
+def index():
+    """
+    This route serves the main HTML page of the chat application.
+    """
+    return render_template('index.html')
+
+# -----------------------------------------------------------------------------
 # Data Storage (In-Memory)
 # -----------------------------------------------------------------------------
 
 users_in_room = {}
 
 # -----------------------------------------------------------------------------
-# SocketIO Event Handlers
+# SocketIO Event Handlers (No changes here)
 # -----------------------------------------------------------------------------
 
 @socketio.on('connect')
 def handle_connect():
-    """
-    This event is triggered when a new client connects to the server.
-    """
     print(f"Client connected: {request.sid}")
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """
-    This event is triggered when a client disconnects.
-    """
     print(f"Client disconnected: {request.sid}")
     if request.sid in users_in_room:
         user = users_in_room[request.sid]
@@ -54,12 +59,8 @@ def handle_disconnect():
         leave_room(room)
         emit('status', {'msg': f'{username} has left the room.'}, to=room)
 
-
 @socketio.on('join')
 def handle_join(data):
-    """
-    Handles a user's request to join a room.
-    """
     username = data.get('username')
     room = data.get('room')
     if not username or not room:
@@ -76,16 +77,10 @@ def handle_join(data):
     emit('status', {'msg': f'{username} has joined the room.'}, to=room)
     print(f"User {username} ({request.sid}) joined room: {room}")
 
-
 @socketio.on('send_message')
 def handle_send_message(data):
-    """
-    Handles incoming messages from a client.
-    """
     room = data.get('room')
     if not room:
         return
     emit('receive_message', data, to=room)
     print(f"Message from {data.get('sender')} in room {room}")
-
-# NOTE: The if __name__ == '__main__': block is removed as Gunicorn will run the app.

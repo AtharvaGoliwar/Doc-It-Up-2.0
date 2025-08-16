@@ -3,6 +3,10 @@
 from flask import Flask, request
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from flask_cors import CORS
+import eventlet # Required for Gunicorn
+
+# It's good practice to monkey patch at the beginning
+eventlet.monkey_patch()
 
 # -----------------------------------------------------------------------------
 # App Initialization
@@ -16,8 +20,8 @@ app.config['SECRET_KEY'] = 'your-very-secret-key!'
 # Enable Cross-Origin Resource Sharing (CORS)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# UPDATED: Initialize Flask-SocketIO with gevent as the async_mode
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent', max_http_buffer_size=10 * 1024 * 1024)
+# Initialize Flask-SocketIO with eventlet as the async_mode
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', max_http_buffer_size=10 * 1024 * 1024)
 
 # -----------------------------------------------------------------------------
 # Data Storage (In-Memory)
@@ -83,3 +87,5 @@ def handle_send_message(data):
         return
     emit('receive_message', data, to=room)
     print(f"Message from {data.get('sender')} in room {room}")
+
+# NOTE: The if __name__ == '__main__': block is removed as Gunicorn will run the app.

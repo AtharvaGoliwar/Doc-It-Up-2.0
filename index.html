@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket Messenger</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- The client-side library for Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Socket Messenger</h1>
+            <p>Modern real-time communication platform</p>
+        </div>
+        <div class="app-layout">
+            <div class="controls-panel">
+                <!-- Connection Status -->
+                <div class="connection-status">
+                    <div class="status-info">
+                        <div class="status-indicator status-disconnected" id="statusIndicator"></div>
+                        <span class="status-text" id="statusText">Disconnected</span>
+                    </div>
+                    <button class="btn btn-secondary" id="connectBtn" onclick="toggleConnection()">Connect</button>
+                </div>
+
+                <!-- User Identity -->
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" class="form-control" id="username" placeholder="Enter your username" value="Anonymous">
+                </div>
+
+                <!-- Room Selection -->
+                <div class="form-group">
+                    <label for="roomSelect">Target Room</label>
+                    <div class="input-group">
+                        <select class="form-control" id="roomSelect">
+                            <option value="general">General Room (Broadcast)</option>
+                            <option value="custom">Custom Room</option>
+                        </select>
+                        <input type="text" class="form-control hidden" id="customRoom" placeholder="Enter room name">
+                    </div>
+                </div>
+
+                <!-- Message Type Selection -->
+                <div class="form-group">
+                    <label>Message Type</label>
+                    <div class="message-type-selector">
+                        <div class="type-option active" data-type="text" onclick="selectMessageType('text')">
+                            <div class="type-icon">💬</div>
+                            <div class="type-label">Text Message</div>
+                        </div>
+                        <div class="type-option" data-type="link" onclick="selectMessageType('link')">
+                            <div class="type-icon">🔗</div>
+                            <div class="type-label">Hyperlink</div>
+                        </div>
+                        <div class="type-option" data-type="document" onclick="selectMessageType('document')">
+                            <div class="type-icon">📄</div>
+                            <div class="type-label">Document</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Text Input -->
+                <div class="form-group" id="textInput">
+                    <label for="messageText">Message Content</label>
+                    <textarea class="form-control" id="messageText" placeholder="Type your message here..."></textarea>
+                </div>
+
+                <!-- Link Input -->
+                <div class="form-group hidden" id="linkInput">
+                    <label for="linkUrl">Link URL</label>
+                    <input type="url" class="form-control" id="linkUrl" placeholder="https://example.com">
+                    <label for="linkTitle" style="margin-top: 10px;">Link Title (Optional)</label>
+                    <input type="text" class="form-control" id="linkTitle" placeholder="Descriptive title for the link">
+                </div>
+
+                <!-- Document Upload -->
+                <div class="form-group hidden" id="documentInput">
+                    <label>Document Upload</label>
+                    <div class="file-upload-area" onclick="document.getElementById('fileInput').click()">
+                        <div class="type-icon">📁</div>
+                        <div class="file-upload-text">Click to select a file or drag and drop</div>
+                        <div class="file-upload-subtext">Supported: PDF, DOC, TXT, Images (Max 10MB)</div>
+                    </div>
+                    <input type="file" id="fileInput" class="hidden" accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif">
+                    <div id="selectedFile" class="hidden selected-file"></div>
+                </div>
+
+                <!-- Send Button -->
+                <button class="btn btn-primary send-button" onclick="sendMessage()">
+                    Send Message
+                </button>
+            </div>
+            <div class="chat-panel">
+                <div class="messages-container" id="messagesContainer">
+                     <div class="message system">
+                        <div class="message-content">Welcome! Connect to a room to start messaging.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let socket = null;
+        let currentMessageType = 'text';
+
+        // DOM Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const usernameInput = document.getElementById('username');
+        const roomSelect = document.getElementById('roomSelect');
+        const customRoomInput = document.getElementById('customRoom');
+
+        // --- Event Listeners ---
+        roomSelect.addEventListener('change', function() {
+            customRoomInput.classList.toggle('hidden', this.value !== 'custom');
+        });
+
+        const fileInput = document.getElementById('fileInput');
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            const selectedFileDiv = document.getElementById('selectedFile');
+            if (file) {
+                selectedFileDiv.innerHTML = `
+                    <strong>Selected File:</strong> ${file.name}<br>
+                    <span style="color: #888888;">Size: ${(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                `;
+                selectedFileDiv.classList.remove('hidden');
+            } else {
+                selectedFileDiv.classList.add('hidden');
+            }
+        });
+        
+        // --- Drag and Drop ---
+        const fileUploadArea = document.querySelector('.file-upload-area');
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            fileUploadArea.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
+        ['dragenter', 'dragover'].forEach(eventName => {
+            fileUploadArea.addEventListener(eventName, () => fileUploadArea.classList.add('dragover'), false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            fileUploadArea.addEventListener(eventName, () => fileUploadArea.classList.remove('dragover'), false);
+        });
+        fileUploadArea.addEventListener('drop', e => {
+            fileInput.files = e.dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }, false);
+
+        // --- Core Functions ---
+        function selectMessageType(type) {
+            currentMessageType = type;
+            document.querySelectorAll('.type-option').forEach(opt => opt.classList.remove('active'));
+            document.querySelector(`[data-type="${type}"]`).classList.add('active');
+            
+            ['text', 'link', 'document'].forEach(id => {
+                document.getElementById(id + 'Input').classList.add('hidden');
+            });
+            document.getElementById(type + 'Input').classList.remove('hidden');
+        }
+
+        function toggleConnection() {
+            if (socket && socket.connected) {
+                disconnect();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const username = usernameInput.value.trim();
+            if (!username) {
+                showToast('Please enter a username.', 'error');
+                return;
+            }
+
+            // Establish connection with the backend server
+            socket = io("ws://localhost:5000");
+
+            // --- Socket Event Handlers ---
+            socket.on('connect', () => {
+                console.log('Connected to server!');
+                updateConnectionStatus(true);
+                showToast('Successfully connected to server', 'success');
+                const room = getRoomName();
+                socket.emit('join', { username: username, room: room });
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server.');
+                updateConnectionStatus(false);
+                showToast('Disconnected from server', 'info');
+                addSystemMessage('Connection lost.');
+            });
+
+            socket.on('status', (data) => {
+                console.log('Status update:', data.msg);
+                addSystemMessage(data.msg);
+            });
+
+            socket.on('receive_message', (data) => {
+                console.log('Message received:', data);
+                const currentUser = usernameInput.value.trim();
+                const messageClass = data.sender === currentUser ? 'sent' : 'received';
+                addMessage(data, messageClass);
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+            }
+        }
+
+        function sendMessage() {
+            if (!socket || !socket.connected) {
+                showToast('You are not connected.', 'error');
+                return;
+            }
+
+            const username = usernameInput.value.trim();
+            const room = getRoomName();
+            let messageData = { type: currentMessageType, room, sender: username };
+
+            switch (currentMessageType) {
+                case 'text':
+                    const text = document.getElementById('messageText').value; // Get raw text
+                    if (!text) return showToast('Message is empty.', 'error');
+                    messageData.content = text;
+                    document.getElementById('messageText').value = '';
+                    break;
+
+                case 'link':
+                    const url = document.getElementById('linkUrl').value.trim();
+                    if (!url) return showToast('URL is required.', 'error');
+                    messageData.url = url;
+                    messageData.title = document.getElementById('linkTitle').value.trim() || url;
+                    document.getElementById('linkUrl').value = '';
+                    document.getElementById('linkTitle').value = '';
+                    break;
+
+                case 'document':
+                    const file = fileInput.files[0];
+                    if (!file) return showToast('Please select a file.', 'error');
+                    if (file.size > 10 * 1024 * 1024) return showToast('File exceeds 10MB limit.', 'error');
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        messageData.fileName = file.name;
+                        messageData.fileSize = file.size;
+                        messageData.fileData = e.target.result;
+                        
+                        socket.emit('send_message', messageData);
+                    };
+                    reader.readAsDataURL(file);
+
+                    fileInput.value = '';
+                    document.getElementById('selectedFile').classList.add('hidden');
+                    return; 
+            }
+            
+            socket.emit('send_message', messageData);
+        }
+
+        // --- UI Update Functions ---
+        function updateConnectionStatus(isConnected) {
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            statusIndicator.className = `status-indicator ${isConnected ? 'status-connected' : 'status-disconnected'}`;
+            statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
+            connectBtn.textContent = isConnected ? 'Disconnect' : 'Connect';
+            
+            [usernameInput, roomSelect, customRoomInput].forEach(el => el.disabled = isConnected);
+        }
+
+        function getRoomName() {
+            return roomSelect.value === 'custom' 
+                ? (customRoomInput.value.trim() || 'unnamed-room') 
+                : roomSelect.value;
+        }
+
+        function addSystemMessage(content) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message system';
+            msgDiv.innerHTML = `<div class="message-content">${content}</div>`;
+            messagesContainer.appendChild(msgDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function addMessage(data, messageClass) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${messageClass}`;
+
+            let contentHTML = '';
+            let rawContent = ''; // Store the raw text for the copy function
+
+            switch (data.type) {
+                case 'text':
+                    const pre = document.createElement('pre');
+                    const code = document.createElement('code');
+                    code.textContent = data.content; // Use textContent to prevent XSS
+                    pre.appendChild(code);
+                    contentHTML = pre.outerHTML;
+                    rawContent = data.content;
+                    break;
+                case 'link':
+                    contentHTML = `🔗 <a href="${data.url}" target="_blank" rel="noopener noreferrer">${data.title}</a>`;
+                    rawContent = data.url;
+                    break;
+                case 'document':
+                    contentHTML = `📄 <a href="${data.fileData}" download="${data.fileName}">${data.fileName}</a> (${(data.fileSize / 1024 / 1024).toFixed(2)} MB)`;
+                    rawContent = data.fileName;
+                    break;
+            }
+
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-btn';
+            copyBtn.textContent = 'Copy';
+            copyBtn.onclick = function() {
+                const tempTextArea = document.createElement('textarea');
+                tempTextArea.value = rawContent;
+                document.body.appendChild(tempTextArea);
+                tempTextArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempTextArea);
+                showToast('Copied to clipboard!', 'info');
+            };
+
+            msgDiv.innerHTML = `
+                <div class="message-meta">${data.sender}</div>
+                <div class="message-content">${contentHTML}</div>
+            `;
+            msgDiv.appendChild(copyBtn);
+            messagesContainer.appendChild(msgDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // --- Initial State ---
+        selectMessageType('text');
+        updateConnectionStatus(false);
+    </script>
+</body>
+</html>
+

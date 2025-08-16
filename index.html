@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Socket Messenger</title>
+    <title>Doc-It-Up-2.0</title>
     <link rel="stylesheet" href="style.css">
     <!-- The client-side library for Socket.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
@@ -11,7 +11,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Socket Messenger</h1>
+            <h1>Doc It Up 2.0</h1>
             <p>Modern real-time communication platform</p>
         </div>
         <div class="app-layout">
@@ -183,7 +183,15 @@
             }
 
             // Establish connection with the backend server
-            socket = io("ws://localhost:5000");
+            // IMPORTANT: Replace the URL with your live Render URL
+            const serverUrl = 'YOUR_RENDER_URL_HERE'; // e.g., 'https://your-app-name.onrender.com'
+            if (serverUrl === 'YOUR_RENDER_URL_HERE') {
+                showToast('Please update the serverUrl in the script!', 'error');
+                // For local testing, fallback to localhost
+                socket = io("ws://localhost:5000");
+            } else {
+                socket = io(serverUrl);
+            }
 
             // --- Socket Event Handlers ---
             socket.on('connect', () => {
